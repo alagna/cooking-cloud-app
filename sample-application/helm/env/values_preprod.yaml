@@ -1,0 +1,10 @@
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  env: preprod
+
+# --- Application values
+app:
+  ingress:
+    host: cooking-cloud-app-preprod

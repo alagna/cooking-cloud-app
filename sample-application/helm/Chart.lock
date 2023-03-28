@@ -1,0 +1,9 @@
+dependencies:
+- name: mongodb
+  repository: https://charts.helm.sh/stable
+  version: 7.6.5
+- name: sample-cloud-service
+  repository: https://gitlab.com/api/v4/projects/44085565/packages/helm/stable/
+  version: 0.0.1
+digest: sha256:f0cc5fe7fcdf1e5a02f2f6b05af6defc1d42bc32b13a6fb3c0f15967b8c97d6c
+generated: "2023-03-07T11:52:32.235206+01:00"

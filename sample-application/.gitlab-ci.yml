@@ -1,0 +1,96 @@
+stages:
+  - upgrade_dev
+  - publish
+  - upgrade_test
+  - upgrade_prod
+
+image:
+  name: dtzar/helm-kubectl:latest
+  entrypoint: [ "" ]
+  pull_policy: ["if-not-present", "always"]
+
+
+variables:
+  # CI_REGISTRY_USER: default variable
+  # CI_REGISTRY_TOKEN: pipeline variable
+  CI_PROJECT_ID: 44085565
+  CI_API_V4_URL: https://gitlab.com/api/v4
+  CHART: sample-cloud-application
+  CHART_PATH: helm
+  HELM_REPO: gitlab
+  KUBECONFIG_FILE_NAME: kubeconfig-cooking-cloud-app.yaml
+  KUBE_CONTEXT: cooking-cloud-app-k8s
+  DEPLOYMENT_NAME: cloud-app
+  NAMESPACE_DEV: app-dev
+  NAMESPACE_TEST: app-test
+  NAMESPACE_PREPROD: app-preprod
+  NAMESPACE_PROD: app-prod
+
+before_script:
+  - helm plugin install https://github.com/chartmuseum/helm-push.git
+  - >
+    helm repo add ${HELM_REPO}      
+    ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable
+    --username ${CI_REGISTRY_USER}
+    --password ${CI_REGISTRY_TOKEN}
+  - mkdir $(pwd)/.kube
+  - cp ${KUBECONFIG_FILE_NAME} $(pwd)/.kube
+  - export KUBECONFIG=$(pwd)/.kube/${KUBECONFIG_FILE_NAME}
+  - kubectl config use-context cooking-cloud-app-k8s
+  - kubectl config view
+
+deploy helm in dev:
+  stage: upgrade_dev
+  tags:
+    - deploy
+  environment:
+    name: dev
+  only:
+    changes:
+      - "**/Chart.yaml"
+      - "**/values.yaml"
+      - "**/values_dev.yaml"
+  script:
+    - cd ${CHART_PATH}
+    - helm dependency update
+    - helm upgrade --install ${DEPLOYMENT_NAME} . -n ${NAMESPACE_DEV} -f values.yaml -f env/values_dev.yaml
+
+publish helm chart:
+  stage: publish
+  only:
+    - tags
+  tags:
+    - build
+  script:
+    - cd helm
+    - helm dependency update
+    - helm package .
+    - helm cm-push ${CHART}*.tgz ${HELM_REPO}
+
+deploy helm in test:
+  stage: upgrade_test
+  only:
+    - tags
+  tags:
+    - deploy
+  environment:
+    name: test
+  script:
+    - cd ${CHART_PATH}
+    - helm dependency update
+    - helm upgrade --install ${DEPLOYMENT_NAME} . -n ${NAMESPACE_TEST} -f values.yaml -f env/values_test.yaml
+
+deploy helm in prod:
+  stage: upgrade_prod
+  when: manual
+  environment:
+    name: prod
+  only:
+    - tags
+  tags:
+    - deploy
+  script:
+    - cd ${CHART_PATH}
+    - helm dependency update
+    - helm upgrade --install ${DEPLOYMENT_NAME} . -n ${NAMESPACE_PROD} -f values.yaml -f env/values_prod.yaml
+    - helm upgrade --install ${DEPLOYMENT_NAME} . -n ${NAMESPACE_PREPROD} -f values.yaml -f env/values_preprod.yaml

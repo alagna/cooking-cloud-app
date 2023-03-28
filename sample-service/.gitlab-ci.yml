@@ -1,0 +1,52 @@
+stages:
+  - deploy
+  - publish
+
+image:
+  name: dtzar/helm-kubectl:latest
+  entrypoint: [ "" ]
+  pull_policy: ["if-not-present", "always"]
+
+variables:
+  # CI_REGISTRY_USER: default variable
+  # CI_REGISTRY_TOKEN: pipeline variable
+  CI_PROJECT_ID: 44085565
+  CI_API_V4_URL: https://gitlab.com/api/v4
+  CHART: sample-cloud-service
+  CHART_PATH: helm
+  HELM_REPO: gitlab
+  KUBECONFIG_FILE_NAME: kubeconfig-cooking-cloud-app.yaml
+  KUBE_CONTEXT: cooking-cloud-app-k8s
+  DEPLOYMENT_FILE_NAME: nginx-deployment.yml
+  NAMESPACE_DEV: app-dev
+
+continuously deploy on k8s dev:
+  stage: deploy
+  tags:
+    - deploy
+  before_script:
+    - mkdir $(pwd)/.kube
+    - cp ${KUBECONFIG_FILE_NAME} $(pwd)/.kube
+    - export KUBECONFIG=$(pwd)/.kube/${KUBECONFIG_FILE_NAME}
+    - kubectl config use-context ${KUBE_CONTEXT}
+  script:
+    - kubectl apply -f src/main/helm/templates/${DEPLOYMENT_FILE_NAME} -n ${NAMESPACE_DEV}
+
+# see https://docs.gitlab.com/ee/user/packages/helm_repository/#publish-a-package
+publish helm chart:
+  stage: publish
+  only:
+    - tags
+  tags:
+    - build
+  before_script:
+    - helm plugin install https://github.com/chartmuseum/helm-push.git
+    - >
+      helm repo add ${HELM_REPO}      
+      ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable
+      --username ${CI_REGISTRY_USER}
+      --password ${CI_REGISTRY_TOKEN}
+  script:
+    - cd src/main/helm
+    - helm package .
+    - helm cm-push ${CHART}*.tgz ${HELM_REPO}
